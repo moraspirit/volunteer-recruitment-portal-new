@@ -19,7 +19,7 @@ export default function RootLayout({
     <html lang="en">
       {/* min-h-screen flex flex-col ensures the footer is always pushed to the bottom */}
       <body className={`${inter.className} min-h-screen flex flex-col bg-zinc-50/50`}>
-        
+
         {/* Main Page Content */}
         <main className="flex-1">
           {children}
@@ -31,7 +31,7 @@ export default function RootLayout({
             &copy; {new Date().getFullYear()} MoraSpirit Volunteer Application Portal. All rights reserved.
           </p>
         </footer>
-        
+
       </body>
     </html>
   );
