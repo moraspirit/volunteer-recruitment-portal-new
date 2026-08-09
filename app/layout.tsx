@@ -26,10 +26,9 @@ export default function RootLayout({
         </main>
 
         {/* Global Footer */}
-        <footer className="w-full py-6 mt-12 border-t border-zinc-200 bg-white text-center">
-          <p className="text-xs text-zinc-500 font-medium">
-            &copy; {new Date().getFullYear()} MoraSpirit Volunteer Application Portal. All rights reserved.
-          </p>
+        <footer className="w-full py-6 text-center border-t border-zinc-800 bg-zinc-950 text-zinc-400 text-sm">          <p className="text-xs text-zinc-500 font-medium">
+          &copy; {new Date().getFullYear()} MoraSpirit Volunteer Application Portal. All rights reserved.
+        </p>
         </footer>
 
       </body>
