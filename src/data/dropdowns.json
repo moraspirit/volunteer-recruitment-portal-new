@@ -1,0 +1,30 @@
+{
+    "faculties": [
+        "Faculty of Engineering",
+        "Faculty of Information Technology",
+        "Faculty of Architecture",
+        "Faculty of Business",
+        "Faculty of Medicine",
+        "NDT"
+    ],
+    "batches": [
+        "Batch 21",
+        "Batch 22",
+        "Batch 23",
+        "Batch 24",
+        "Batch 25"
+    ],
+    "pillars": [
+        "Announcing and Hosting Pillar",
+        "Corporate Development Pillar",
+        "Creative Design Pillar",
+        "Editorial Pillar",
+        "Financial Controlling Panel",
+        "Human Resources Management Pillar",
+        "Marketing Pillar",
+        "Photography Pillar",
+        "Special Projects Pillar",
+        "Video Editing & Live Streaming Pillar",
+        "Web and Technology Pillar"
+    ]
+}
