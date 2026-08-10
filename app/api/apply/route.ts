@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { applicationSchema } from '@/lib/validators';
 import { applyRateLimit } from '@/lib/rateLimit';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // Make sure this is in your .env.local file
+);
 
 // Helper function to check Magic Bytes
 function isValidFileType(buffer: Uint8Array): boolean {
@@ -27,6 +32,30 @@ export async function POST(request: Request) {
         { error: 'Too many submissions from this IP. Please try again later.' },
         { status: 429 }
       );
+    }
+
+    // --- SYSTEM DEADLINE CHECK ---
+    const { data: settings } = await supabaseAdmin
+      .from('app_settings')
+      .select('closing_time, is_open')
+      .single();
+
+    if (settings) {
+      // 1. Check if admin manually turned off the form
+      if (settings.is_open === false) {
+        return NextResponse.json(
+          { error: 'Submissions are currently closed.' },
+          { status: 403 }
+        );
+      }
+
+      // 2. Check if the deadline has passed
+      if (settings.closing_time && new Date() > new Date(settings.closing_time)) {
+        return NextResponse.json(
+          { error: 'The application deadline has passed.' },
+          { status: 403 }
+        );
+      }
     }
 
     const formData = await request.formData();

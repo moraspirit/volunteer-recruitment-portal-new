@@ -42,6 +42,12 @@ export default async function AdminLayout({
                         >
                             Dashboard
                         </Link>
+                        <Link
+                            href="/admin/settings"
+                            className="text-zinc-600 hover:text-zinc-900 font-medium text-sm"
+                        >
+                            Settings
+                        </Link>
 
                         {isSuperAdmin && (
                             <Link
@@ -51,6 +57,7 @@ export default async function AdminLayout({
                                 Admins
                             </Link>
                         )}
+
 
                         {/* --- LOGOUT BUTTON --- */}
                         {/* The ml-auto class inside the button component pushes it to the far right */}
