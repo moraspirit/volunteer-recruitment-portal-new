@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import dropdownData from '@/src/data/dropdowns.json';
 import CountdownTimer from "@/components/CountdownTimer"; // Ensure this matches your path
+import { Turnstile } from "@marsidev/react-turnstile";
 
 export default function ApplicationForm() {
   // Basic Details State
@@ -27,6 +28,8 @@ export default function ApplicationForm() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [isFormClosed, setIsFormClosed] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileKey, setTurnstileKey] = useState(0);
 
   // Academic & Pillar Selection State
   const [batch, setBatch] = useState('');
@@ -79,6 +82,8 @@ export default function ApplicationForm() {
     setSelectedPillars([]);
     setTouched({});
     setServerError(null);
+    setTurnstileToken(null);
+    setTurnstileKey(prev => prev + 1);
   };
 
   const errors = useMemo(() => {
@@ -133,7 +138,7 @@ export default function ApplicationForm() {
 
     const formData = new FormData();
     formData.append('cv', cvFile!);
-    formData.append('turnstileToken', 'dummy-turnstile-token');
+    formData.append('turnstileToken', turnstileToken || '');
     formData.append('data', JSON.stringify(payloadData));
 
     try {
@@ -498,10 +503,25 @@ export default function ApplicationForm() {
             </div>
           </div>
 
+          {/* Cloudflare Turnstile Verification */}
+          <div className="pt-4 flex flex-col gap-2">
+            <Label className="text-zinc-300 font-medium">Security Verification</Label>
+            <Turnstile
+              key={turnstileKey}
+              siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
+              onSuccess={(token) => setTurnstileToken(token)}
+              onError={() => setTurnstileToken(null)}
+              onExpire={() => setTurnstileToken(null)}
+              options={{
+                theme: 'dark',
+              }}
+            />
+          </div>
+
           <div className="flex items-center gap-4 pt-6">
             <button
               type="submit"
-              disabled={!isFormValid || isSubmitting || isFormClosed}
+              disabled={!isFormValid || isSubmitting || isFormClosed || !turnstileToken}
               className="py-3 px-8 bg-red-600 text-white rounded-xl text-base font-semibold hover:bg-red-700 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center min-w-[180px]"
             >
               {isSubmitting ? (

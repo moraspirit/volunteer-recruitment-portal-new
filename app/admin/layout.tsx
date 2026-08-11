@@ -3,6 +3,8 @@ import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 import LogoutButton from '../../components/LogoutButton';
 
+export const dynamic = 'force-dynamic';
+
 export default async function AdminLayout({
     children,
 }: {
@@ -22,7 +24,10 @@ export default async function AdminLayout({
 
             isSuperAdmin = payload.role === 'super_admin';
         }
-    } catch (error) {
+    } catch (error: any) {
+        if (error?.digest === 'DYNAMIC_SERVER_USAGE' || error?.message?.includes('Dynamic server usage')) {
+            throw error;
+        }
         console.error('Failed to verify JWT in layout:', error);
     }
 
