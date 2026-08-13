@@ -34,7 +34,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                         <Link href="/admin" className="flex items-center gap-2.5 mr-4 shrink-0">
                             <div className="w-8 h-8 relative">
                                 <Image
-                                    src="/Moraspirit logo transparent.png"
+                                    src="/moraspirit-logo.svg"
                                     alt="MoraSpirit"
                                     fill
                                     sizes="32px"
@@ -87,7 +87,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                     <div className="flex items-center gap-2">
                         <div className="w-4 h-4 relative opacity-50">
                             <Image
-                                src="/Moraspirit logo transparent.png"
+                                src="/moraspirit-logo.svg"
                                 alt="MoraSpirit"
                                 fill
                                 sizes="16px"

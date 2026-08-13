@@ -21,7 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                         <div className="flex items-center gap-2.5">
                             <div className="w-7 h-7 relative shrink-0">
                                 <Image
-                                    src="/Moraspirit logo transparent.png"
+                                    src="/moraspirit-logo.svg"
                                     alt="MoraSpirit"
                                     fill
                                     sizes="28px"
@@ -55,7 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                             <div className="flex items-center gap-2.5">
                                 <div className="w-6 h-6 relative opacity-70">
                                     <Image
-                                        src="/Moraspirit logo transparent.png"
+                                        src="/moraspirit-logo.svg"
                                         alt="MoraSpirit"
                                         fill
                                         sizes="24px"
