@@ -1,9 +1,9 @@
-import ApplicationForm from "../components/ApplicationForm";
+import ApplicationForm from '../components/ApplicationForm';
 
 export default function Home() {
-  return (
-    <main className="min-h-screen bg-zinc-800 py-3 px-4">
-      <ApplicationForm />
-    </main>
-  );
+    return (
+        <div className="min-h-screen bg-zinc-50 py-8 px-4">
+            <ApplicationForm />
+        </div>
+    );
 }

@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     // --- SYSTEM DEADLINE CHECK ---
     const { data: settings } = await supabaseAdmin
       .from('app_settings')
-      .select('closing_time, is_open')
+      .select('closing_time, opening_time, is_open')
       .single();
 
     if (settings) {
@@ -49,7 +49,15 @@ export async function POST(request: Request) {
         );
       }
 
-      // 2. Check if the deadline has passed
+      // 2. Check if applications haven't opened yet
+      if (settings.opening_time && new Date() < new Date(settings.opening_time)) {
+        return NextResponse.json(
+          { error: 'Applications are not open yet.' },
+          { status: 403 }
+        );
+      }
+
+      // 3. Check if the deadline has passed
       if (settings.closing_time && new Date() > new Date(settings.closing_time)) {
         return NextResponse.json(
           { error: 'The application deadline has passed.' },

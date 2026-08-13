@@ -12,7 +12,7 @@ export async function GET() {
     try {
         const { data, error } = await supabaseAdmin
             .from('app_settings')
-            .select('closing_time, is_open')
+            .select('closing_time, opening_time, is_open')
             .single();
 
         if (error) throw error;

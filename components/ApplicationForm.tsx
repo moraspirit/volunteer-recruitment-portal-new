@@ -1,577 +1,724 @@
 'use client';
 
-import { useState, useMemo, useEffect } from "react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import dropdownData from '@/src/data/dropdowns.json';
-import CountdownTimer from "@/components/CountdownTimer"; // Ensure this matches your path
-import { Turnstile } from "@marsidev/react-turnstile";
+import { useState, useMemo, useEffect } from 'react';
+import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import CountdownTimer from '@/components/CountdownTimer';
+import { Turnstile } from '@marsidev/react-turnstile';
+
+interface FormConfig {
+    app_name: string;
+    app_description: string;
+    eligible_universities: string[];
+    eligible_batches: string[];
+    eligible_faculties: string[];
+    index_number_hint: string;
+    phone_hint: string;
+    allow_multi_university: boolean;
+}
+
+interface Pillar {
+    id: string;
+    name: string;
+}
+
+const FALLBACK_CONFIG: FormConfig = {
+    app_name: 'MoraSpirit Volunteer Recruitment',
+    app_description: 'Join MoraSpirit and be part of our amazing team!',
+    eligible_universities: ['University of Moratuwa'],
+    eligible_batches: ['Batch 21', 'Batch 22', 'Batch 23', 'Batch 24', 'Batch 25'],
+    eligible_faculties: [
+        'Faculty of Engineering',
+        'Faculty of Information Technology',
+        'Faculty of Architecture',
+        'Faculty of Business',
+        'Faculty of Medicine',
+        'NDT',
+    ],
+    index_number_hint: 'e.g. 220123X',
+    phone_hint: 'e.g. 0712345678 or +94712345678',
+    allow_multi_university: false,
+};
+
+const FALLBACK_PILLARS = [
+    'Announcing and Hosting Pillar',
+    'Corporate Development Pillar',
+    'Creative Design Pillar',
+    'Editorial Pillar',
+    'Financial Controlling Panel',
+    'Human Resources Management Pillar',
+    'Marketing Pillar',
+    'Photography Pillar',
+    'Special Projects Pillar',
+    'Video Editing & Live Streaming Pillar',
+    'Web and Technology Pillar',
+];
+
+// Shared input class helpers
+const baseInput =
+    'w-full h-10 px-3.5 text-sm rounded-lg border bg-white text-zinc-900 placeholder:text-zinc-400 outline-none transition-colors';
+const validInput = 'border-zinc-300 focus:border-red-400 focus:ring-2 focus:ring-red-100';
+const errorInput = 'border-red-400 ring-2 ring-red-100';
+
+function fieldClass(touched: boolean, hasError: boolean) {
+    return `${baseInput} ${touched && hasError ? errorInput : validInput}`;
+}
 
 export default function ApplicationForm() {
-  // Basic Details State
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [indexNumber, setIndexNumber] = useState('');
-  const [email, setEmail] = useState('');
-  const [whatsappNumber, setWhatsappNumber] = useState('');
-  const [dob, setDob] = useState('');
-  const [address, setAddress] = useState('');
-  const [cvFile, setCvFile] = useState<File | null>(null);
-  const [portfolioUrl, setPortfolioUrl] = useState('');
-  const [interests, setInterests] = useState('');
-  const [clubs, setClubs] = useState('');
+    const [formConfig, setFormConfig] = useState<FormConfig>(FALLBACK_CONFIG);
+    const [pillars, setPillars] = useState<string[]>(FALLBACK_PILLARS);
+    const [configLoaded, setConfigLoaded] = useState(false);
 
-  // Loading, Error, & Closing State Mapping
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [touched, setTouched] = useState<Record<string, boolean>>({});
-  const [serverError, setServerError] = useState<string | null>(null);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [isFormClosed, setIsFormClosed] = useState(false);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-  const [turnstileKey, setTurnstileKey] = useState(0);
+    // Form fields
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
+    const [indexNumber, setIndexNumber] = useState('');
+    const [email, setEmail] = useState('');
+    const [whatsappNumber, setWhatsappNumber] = useState('');
+    const [dob, setDob] = useState('');
+    const [address, setAddress] = useState('');
+    const [cvFile, setCvFile] = useState<File | null>(null);
+    const [portfolioUrl, setPortfolioUrl] = useState('');
+    const [interests, setInterests] = useState('');
+    const [clubs, setClubs] = useState('');
+    const [batch, setBatch] = useState('');
+    const [batchOther, setBatchOther] = useState('');
+    const [faculty, setFaculty] = useState('');
+    const [facultyOther, setFacultyOther] = useState('');
+    const [department, setDepartment] = useState('');
+    const [university, setUniversity] = useState('');
+    const [universityOther, setUniversityOther] = useState('');
+    const [selectedPillars, setSelectedPillars] = useState<string[]>([]);
 
-  // Academic & Pillar Selection State
-  const [batch, setBatch] = useState('');
-  const [faculty, setFaculty] = useState('');
-  const [department, setDepartment] = useState('');
-  const [selectedPillars, setSelectedPillars] = useState<string[]>([]);
+    // UI
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [touched, setTouched] = useState<Record<string, boolean>>({});
+    const [serverError, setServerError] = useState<string | null>(null);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [isFormClosed, setIsFormClosed] = useState(false);
+    const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+    const [turnstileKey, setTurnstileKey] = useState(0);
 
-  // Check initial settings state on mount to respect manual admin toggles
-  useEffect(() => {
-    const checkFormStatus = async () => {
-      try {
-        const res = await fetch('/api/settings', { cache: 'no-store' });
-        const data = await res.json();
-        if (data && data.is_open === false) {
-          setIsFormClosed(true);
+    useEffect(() => {
+        const load = async () => {
+            try {
+                const [cfgRes, pillarsRes, settingsRes] = await Promise.all([
+                    fetch('/api/form-config', { cache: 'no-store' }),
+                    fetch('/api/pillars', { cache: 'no-store' }),
+                    fetch('/api/settings', { cache: 'no-store' }),
+                ]);
+
+                if (cfgRes.ok) {
+                    const cfg = await cfgRes.json();
+                    const merged = { ...FALLBACK_CONFIG, ...cfg };
+                    setFormConfig(merged);
+                    if (merged.eligible_universities?.length === 1) {
+                        setUniversity(merged.eligible_universities[0]);
+                    }
+                }
+
+                if (pillarsRes.ok) {
+                    const { pillars: pData } = await pillarsRes.json();
+                    if (pData?.length) setPillars(pData.map((p: Pillar) => p.name));
+                }
+
+                if (settingsRes.ok) {
+                    const s = await settingsRes.json();
+                    const now = new Date();
+                    const isManuallyClosed = s?.is_open === false;
+                    const isNotOpenYet = s?.opening_time && now < new Date(s.opening_time);
+                    const isDeadlinePassed = s?.closing_time && now > new Date(s.closing_time);
+                    if (isManuallyClosed || isNotOpenYet || isDeadlinePassed) {
+                        setIsFormClosed(true);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to load config:', err);
+            } finally {
+                setConfigLoaded(true);
+            }
+        };
+        load();
+    }, []);
+
+    const singleUniversity =
+        formConfig.eligible_universities.length === 1 || !formConfig.allow_multi_university;
+
+    // Resolve "Other" sentinel to the typed value before validation / submission
+    const resolvedFaculty    = faculty    === '__OTHER__' ? facultyOther.trim()    : faculty;
+    const resolvedBatch      = batch      === '__OTHER__' ? batchOther.trim()      : batch;
+    const resolvedUniversity = university === '__OTHER__' ? universityOther.trim() : university;
+
+    const touch = (f: string) => setTouched((p) => ({ ...p, [f]: true }));
+
+    const normalizePhone = (v: string) => v.replace(/[\s\-().]/g, '');
+
+    const errors = useMemo(() => {
+        const e: Record<string, string> = {};
+        if (!firstName.trim()) e.firstName = 'First name is required.';
+        if (!lastName.trim()) e.lastName = 'Last name is required.';
+        if (!indexNumber.trim()) e.indexNumber = 'Index number is required.';
+        if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+            e.email = 'Please enter a valid email address.';
+        const ph = normalizePhone(whatsappNumber);
+        if (!ph || !/^\+?\d{7,15}$/.test(ph))
+            e.whatsappNumber = 'Enter a valid number, e.g. 0712345678 or +94712345678.';
+        if (!dob.trim()) e.dob = 'Date of birth is required.';
+        if (!address.trim()) e.address = 'Address is required.';
+
+        if (!resolvedUniversity) e.university = 'Please select or enter your university.';
+        else if (university === '__OTHER__' && !universityOther.trim())
+            e.university = 'Please type your university name.';
+
+        if (!resolvedFaculty) e.faculty = 'Please select or enter your faculty.';
+        else if (faculty === '__OTHER__' && !facultyOther.trim())
+            e.faculty = 'Please type your faculty name.';
+
+        if (!department.trim()) e.department = 'Department is required.';
+
+        if (!resolvedBatch) e.batch = 'Please select or enter your batch.';
+        else if (batch === '__OTHER__' && !batchOther.trim())
+            e.batch = 'Please type your batch.';
+
+        if (selectedPillars.length === 0) e.pillars = 'Select at least 1 pillar (max 3).';
+        if (!cvFile) e.cv = 'CV / Resume is required.';
+        if (portfolioUrl.trim()) {
+            try { new URL(portfolioUrl); } catch { e.portfolioUrl = 'Must be a valid URL.'; }
         }
-      } catch (error) {
-        console.error("Failed to check form status", error);
-      }
-    };
-    checkFormStatus();
-  }, []);
+        return e;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [firstName, lastName, indexNumber, email, whatsappNumber, dob, address,
+        resolvedUniversity, university, universityOther,
+        resolvedFaculty, faculty, facultyOther,
+        department,
+        resolvedBatch, batch, batchOther,
+        selectedPillars, cvFile, portfolioUrl]);
 
-  const handlePillarClick = (pillar: string) => {
-    if (selectedPillars.includes(pillar)) {
-      setSelectedPillars(selectedPillars.filter((p) => p !== pillar));
-    } else {
-      if (selectedPillars.length < 3) {
-        setSelectedPillars([...selectedPillars, pillar]);
-      }
-    }
-    setTouched(prev => ({ ...prev, pillars: true }));
-  };
+    const isFormValid = Object.keys(errors).length === 0;
 
-  const handleClear = () => {
-    setFirstName('');
-    setLastName('');
-    setIndexNumber('');
-    setEmail('');
-    setWhatsappNumber('');
-    setDob('');
-    setAddress('');
-    setCvFile(null);
-    setPortfolioUrl('');
-    setInterests('');
-    setClubs('');
-    setBatch('');
-    setFaculty('');
-    setDepartment('');
-    setSelectedPillars([]);
-    setTouched({});
-    setServerError(null);
-    setTurnstileToken(null);
-    setTurnstileKey(prev => prev + 1);
-  };
-
-  const errors = useMemo(() => {
-    const errs: Record<string, string> = {};
-
-    if (!batch) errs.batch = "Please select a batch.";
-    if (!firstName.trim()) errs.firstName = "First name is required.";
-    if (!lastName.trim()) errs.lastName = "Last name is required.";
-    if (!indexNumber.trim()) errs.indexNumber = "Index number is required.";
-    if (!faculty) errs.faculty = "Please select a faculty.";
-    if (!department.trim()) errs.department = "Department is required.";
-    if (!email.trim() || !email.includes('@')) errs.email = "Please enter a valid email address.";
-
-    const whatsappRegex = /^(0|\+94)\d{9}$/;
-    if (!whatsappRegex.test(whatsappNumber)) {
-      errs.whatsappNumber = "Must be a valid 10-digit number or +94 format.";
-    }
-
-    if (!dob.trim()) errs.dob = "Date of birth is required.";
-    if (!address.trim()) errs.address = "Address is required.";
-    if (!cvFile) errs.cv = "CV / Resume file is required.";
-    if (selectedPillars.length === 0) {
-      errs.pillars = "Please select at least 1 pillar (max 3).";
-    }
-
-    return errs;
-  }, [batch, firstName, lastName, indexNumber, faculty, department, email, whatsappNumber, dob, address, cvFile, selectedPillars]);
-
-  const isFormValid = Object.keys(errors).length === 0;
-
-  const handleSubmit = async (e: React.SyntheticEvent) => {
-    e.preventDefault();
-    if (isFormClosed) return;
-
-    setTouched({
-      firstName: true, lastName: true, indexNumber: true, email: true,
-      whatsappNumber: true, dob: true, address: true, faculty: true,
-      department: true, batch: true, pillars: true, cv: true,
-    });
-
-    if (!isFormValid) return;
-
-    setServerError(null);
-    setIsSubmitting(true);
-
-    const payloadData = {
-      batch, firstName, lastName, indexNumber, faculty, department,
-      university: "University of Moratuwa", email, whatsappNumber, dob, address,
-      portfolioUrl: portfolioUrl || undefined, pillars: selectedPillars,
-      interests: interests || undefined, clubs: clubs || undefined,
+    const handlePillarClick = (p: string) => {
+        setSelectedPillars((prev) =>
+            prev.includes(p) ? prev.filter((x) => x !== p) : prev.length < 3 ? [...prev, p] : prev
+        );
+        touch('pillars');
     };
 
-    const formData = new FormData();
-    formData.append('cv', cvFile!);
-    formData.append('turnstileToken', turnstileToken || '');
-    formData.append('data', JSON.stringify(payloadData));
+    const handleClear = () => {
+        setFirstName(''); setLastName(''); setIndexNumber('');
+        setEmail(''); setWhatsappNumber(''); setDob('');
+        setAddress(''); setCvFile(null); setPortfolioUrl('');
+        setInterests(''); setClubs('');
+        setBatch(''); setBatchOther('');
+        setFaculty(''); setFacultyOther('');
+        setDepartment('');
+        if (!singleUniversity) { setUniversity(''); setUniversityOther(''); }
+        setSelectedPillars([]);
+        setTouched({}); setServerError(null);
+        setTurnstileToken(null);
+        setTurnstileKey((k) => k + 1);
+    };
 
-    try {
-      const response = await fetch('/api/apply', {
-        method: 'POST',
-        body: formData,
-      });
+    const handleSubmit = async (e: React.SyntheticEvent) => {
+        e.preventDefault();
+        if (isFormClosed) return;
 
-      const result = await response.json();
+        const allTouched: Record<string, boolean> = {};
+        ['firstName', 'lastName', 'indexNumber', 'email', 'whatsappNumber', 'dob',
+            'address', 'university', 'faculty', 'department', 'batch', 'pillars', 'cv']
+            .forEach((k) => (allTouched[k] = true));
+        setTouched(allTouched);
 
-      if (!response.ok) {
-        if (result.error && typeof result.error === 'string') {
-          throw new Error(result.error);
-        } else {
-          throw new Error("Failed to submit application. Please check your inputs.");
+        if (!isFormValid) return;
+        setServerError(null);
+        setIsSubmitting(true);
+
+        const payload = {
+            batch: resolvedBatch,
+            firstName, lastName, indexNumber,
+            faculty: resolvedFaculty,
+            department,
+            university: resolvedUniversity,
+            email, whatsappNumber: normalizePhone(whatsappNumber), dob, address,
+            portfolioUrl: portfolioUrl || undefined,
+            pillars: selectedPillars,
+            interests: interests || undefined,
+            clubs: clubs || undefined,
+        };
+
+        const formData = new FormData();
+        formData.append('cv', cvFile!);
+        formData.append('turnstileToken', turnstileToken || '');
+        formData.append('data', JSON.stringify(payload));
+
+        try {
+            const res = await fetch('/api/apply', { method: 'POST', body: formData });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error || 'Submission failed. Please try again.');
+            handleClear();
+            setShowSuccessModal(true);
+        } catch (err: any) {
+            setServerError(err.message || 'An error occurred. Please try again.');
+        } finally {
+            setIsSubmitting(false);
         }
-      }
+    };
 
-      handleClear();
-      setShowSuccessModal(true);
-    } catch (error: any) {
-      console.error("Submission error:", error);
-      setServerError(error.message || "An error occurred while submitting the form. Please try again.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    return (
+        <div className="max-w-3xl mx-auto w-full">
+            {/* Countdown */}
+            <CountdownTimer onComplete={() => setIsFormClosed(true)} />
 
-  return (
-    <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-10">
-      {/* Live Countdown & Status Banner */}
-      <CountdownTimer onComplete={() => setIsFormClosed(true)} />
-
-      <form
-        onSubmit={handleSubmit}
-        className={`space-y-8 bg-zinc-950 p-6 md:p-8 rounded-2xl text-zinc-100 shadow-xl border transition-all duration-300 ${isFormClosed ? 'opacity-50 border-zinc-900' : 'border-zinc-900'
-          }`}
-      >
-        <fieldset disabled={isFormClosed || isSubmitting} className="space-y-8">
-
-          {serverError && (
-            <div className="p-4 bg-red-950/50 border border-red-500/50 text-red-200 rounded-xl text-sm font-medium">
-              {serverError}
-            </div>
-          )}
-
-          {/* SECTION 1: Personal & Contact Information */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-white">Personal Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6">
-
-              <div className="space-y-2">
-                <Label htmlFor="firstName" className="text-zinc-300 font-medium">
-                  First Name <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="firstName"
-                  type="text"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  onBlur={() => setTouched(prev => ({ ...prev, firstName: true }))}
-                  placeholder="e.g. Nimal"
-                  className={`bg-zinc-900 border text-white placeholder:text-zinc-600 h-10 px-3.5 text-sm outline-none transition-colors ${touched.firstName && errors.firstName ? 'border-red-500 ring-1 ring-red-500 focus-visible:ring-red-500 focus-visible:border-red-500' : 'border-zinc-800 focus-visible:ring-1 focus-visible:ring-yellow-500 focus-visible:border-yellow-500'}`}
-                />
-                {touched.firstName && errors.firstName && <p className="text-xs text-red-500 mt-1">{errors.firstName}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="lastName" className="text-zinc-300 font-medium">
-                  Last Name <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="lastName"
-                  type="text"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  onBlur={() => setTouched(prev => ({ ...prev, lastName: true }))}
-                  placeholder="e.g. Perera"
-                  className={`bg-zinc-900 border text-white placeholder:text-zinc-600 h-10 px-3.5 text-sm outline-none transition-colors ${touched.lastName && errors.lastName ? 'border-red-500 ring-1 ring-red-500 focus-visible:ring-red-500 focus-visible:border-red-500' : 'border-zinc-800 focus-visible:ring-1 focus-visible:ring-yellow-500 focus-visible:border-yellow-500'}`}
-                />
-                {touched.lastName && errors.lastName && <p className="text-xs text-red-500 mt-1">{errors.lastName}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="indexNumber" className="text-zinc-300 font-medium">
-                  Index Number <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="indexNumber"
-                  type="text"
-                  value={indexNumber}
-                  onChange={(e) => setIndexNumber(e.target.value)}
-                  onBlur={() => setTouched(prev => ({ ...prev, indexNumber: true }))}
-                  placeholder="e.g. 240000X"
-                  className={`bg-zinc-900 border text-white placeholder:text-zinc-600 h-10 px-3.5 text-sm outline-none transition-colors ${touched.indexNumber && errors.indexNumber ? 'border-red-500 ring-1 ring-red-500 focus-visible:ring-red-500 focus-visible:border-red-500' : 'border-zinc-800 focus-visible:ring-1 focus-visible:ring-yellow-500 focus-visible:border-yellow-500'}`}
-                />
-                {touched.indexNumber && errors.indexNumber && <p className="text-xs text-red-500 mt-1">{errors.indexNumber}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-zinc-300 font-medium">
-                  Email <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onBlur={() => setTouched(prev => ({ ...prev, email: true }))}
-                  placeholder="e.g. nimal.perera@gmail.com"
-                  className={`bg-zinc-900 border text-white placeholder:text-zinc-600 h-10 px-3.5 text-sm outline-none transition-colors ${touched.email && errors.email ? 'border-red-500 ring-1 ring-red-500 focus-visible:ring-red-500 focus-visible:border-red-500' : 'border-zinc-800 focus-visible:ring-1 focus-visible:ring-yellow-500 focus-visible:border-yellow-500'}`}
-                />
-                {touched.email && errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="whatsappNumber" className="text-zinc-300 font-medium">
-                  WhatsApp Mobile <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="whatsappNumber"
-                  type="tel"
-                  value={whatsappNumber}
-                  onChange={(e) => setWhatsappNumber(e.target.value)}
-                  onBlur={() => setTouched(prev => ({ ...prev, whatsappNumber: true }))}
-                  placeholder="e.g. 0712345678 or +94712345678"
-                  className={`bg-zinc-900 border text-white placeholder:text-zinc-600 h-10 px-3.5 text-sm outline-none transition-colors ${touched.whatsappNumber && errors.whatsappNumber ? 'border-red-500 ring-1 ring-red-500 focus-visible:ring-red-500 focus-visible:border-red-500' : 'border-zinc-800 focus-visible:ring-1 focus-visible:ring-yellow-500 focus-visible:border-yellow-500'}`}
-                />
-                {touched.whatsappNumber && errors.whatsappNumber && <p className="text-xs text-red-500 mt-1">{errors.whatsappNumber}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="dob" className="text-zinc-300 font-medium">
-                  Date of Birth <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="dob"
-                  type="date"
-                  value={dob}
-                  onChange={(e) => setDob(e.target.value)}
-                  onBlur={() => setTouched(prev => ({ ...prev, dob: true }))}
-                  className={`bg-zinc-900 border text-white h-10 px-3.5 text-sm block w-full outline-none transition-colors [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:invert ${touched.dob && errors.dob ? 'border-red-500 ring-1 ring-red-500 focus-visible:ring-red-500 focus-visible:border-red-500' : 'border-zinc-800 focus-visible:ring-1 focus-visible:ring-yellow-500 focus-visible:border-yellow-500'}`}
-                />
-                {touched.dob && errors.dob && <p className="text-xs text-red-500 mt-1">{errors.dob}</p>}
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="address" className="text-zinc-300 font-medium">
-                  Address <span className="text-red-500">*</span>
-                </Label>
-                <textarea
-                  id="address"
-                  rows={2}
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  onBlur={() => setTouched(prev => ({ ...prev, address: true }))}
-                  placeholder="Enter your residential address here..."
-                  className={`w-full bg-zinc-900 border text-white placeholder:text-zinc-600 rounded-xl px-3.5 py-2 text-sm outline-none transition-colors resize-none ${touched.address && errors.address ? 'border-red-500 ring-1 ring-red-500 focus:ring-red-500 focus:border-red-500' : 'border-zinc-800 focus:ring-1 focus:ring-yellow-500 focus:border-yellow-500'}`}
-                />
-                {touched.address && errors.address && <p className="text-xs text-red-500 mt-1">{errors.address}</p>}
-              </div>
-
-            </div>
-          </div>
-
-          {/* SECTION 2: Academic & Preferences */}
-          <div className="space-y-4 pt-6 border-t border-zinc-800">
-            <h3 className="text-lg font-semibold text-white">Academic & Preferences</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6 items-start">
-
-              <div className="space-y-2">
-                <Label htmlFor="university" className="text-zinc-300 font-medium">
-                  University <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="university"
-                  value="University of Moratuwa"
-                  readOnly
-                  className="bg-zinc-900 border-zinc-800 text-zinc-500 cursor-not-allowed focus-visible:ring-0 h-10 px-3.5 text-sm"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="faculty" className="text-zinc-300 font-medium">
-                  Faculty <span className="text-red-500">*</span>
-                </Label>
-                <Select
-                  value={faculty}
-                  onValueChange={(val) => { setFaculty(val); setTouched(prev => ({ ...prev, faculty: true })); }}
-                >
-                  <SelectTrigger className={`bg-zinc-900 border text-white h-10 px-3.5 text-sm w-full outline-none transition-colors focus:!ring-offset-0 ${touched.faculty && errors.faculty ? 'border-red-500 !ring-1 !ring-red-500 focus:!ring-red-500 focus:!border-red-500' : 'border-zinc-800 focus:!ring-1 focus:!ring-yellow-500 focus:!border-yellow-500'}`}>
-                    <SelectValue placeholder="Select faculty" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                    {dropdownData.faculties.map((facultyOption) => (
-                      <SelectItem
-                        key={facultyOption}
-                        value={facultyOption}
-                        className="cursor-pointer focus:bg-zinc-800 data-[highlighted]:bg-zinc-800 [&>span]:!text-white"
-                      >
-                        {facultyOption}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {touched.faculty && errors.faculty && <p className="text-xs text-red-500 mt-1">{errors.faculty}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="department" className="text-zinc-300 font-medium">
-                  Department / Course <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="department"
-                  type="text"
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  onBlur={() => setTouched(prev => ({ ...prev, department: true }))}
-                  placeholder="e.g. CSE, Civil, Textile"
-                  className={`bg-zinc-900 border text-white placeholder:text-zinc-600 h-10 px-3.5 text-sm outline-none transition-colors ${touched.department && errors.department ? 'border-red-500 ring-1 ring-red-500 focus-visible:ring-red-500 focus-visible:border-red-500' : 'border-zinc-800 focus-visible:ring-1 focus-visible:ring-yellow-500 focus-visible:border-yellow-500'}`}
-                />
-                {touched.department && errors.department && <p className="text-xs text-red-500 mt-1">{errors.department}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="batch" className="text-zinc-300 font-medium">
-                  Batch <span className="text-red-500">*</span>
-                </Label>
-                <Select
-                  value={batch}
-                  onValueChange={(val) => { setBatch(val); setTouched(prev => ({ ...prev, batch: true })); }}
-                >
-                  <SelectTrigger className={`bg-zinc-900 border text-white h-10 px-3.5 text-sm w-full outline-none transition-colors focus:!ring-offset-0 ${touched.batch && errors.batch ? 'border-red-500 !ring-1 !ring-red-500 focus:!ring-red-500 focus:!border-red-500' : 'border-zinc-800 focus:!ring-1 focus:!ring-yellow-500 focus:!border-yellow-500'}`}>
-                    <SelectValue placeholder="Select batch" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                    {dropdownData.batches.map((batchOption) => (
-                      <SelectItem
-                        key={batchOption}
-                        value={batchOption}
-                        className="cursor-pointer focus:bg-zinc-800 data-[highlighted]:bg-zinc-800 [&>span]:!text-white"
-                      >
-                        {batchOption}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {touched.batch && errors.batch && <p className="text-xs text-red-500 mt-1">{errors.batch}</p>}
-              </div>
-
-              {/* Target Pillars - Card-Style Checkbox Grid */}
-              <div className="space-y-3 md:col-span-2 pt-2">
-                <div>
-                  <Label className="text-white font-semibold text-base">
-                    Applied Pillars <span className="text-red-500">*</span>
-                  </Label>
-                  <p className="text-sm text-zinc-400 mt-0.5">
-                    Select up to 3 pillars you wish to apply for.
-                  </p>
+            {/* Page heading */}
+            {configLoaded && (
+                <div className="mb-6 text-center">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900">
+                        {formConfig.app_name}
+                    </h1>
+                    {formConfig.app_description && (
+                        <p className="text-zinc-500 text-sm mt-2">{formConfig.app_description}</p>
+                    )}
                 </div>
+            )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                  {dropdownData.pillars.map((pillar) => {
-                    const isSelected = selectedPillars.includes(pillar);
-                    const isLimitReached = selectedPillars.length >= 3 && !isSelected;
+            <form
+                onSubmit={handleSubmit}
+                className={`bg-white rounded-2xl shadow-sm border border-zinc-200 overflow-hidden transition-opacity duration-300 ${isFormClosed ? 'opacity-50 pointer-events-none' : ''}`}
+            >
+                <fieldset disabled={isFormClosed || isSubmitting}>
+                    {serverError && (
+                        <div className="mx-6 mt-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm font-medium">
+                            {serverError}
+                        </div>
+                    )}
 
-                    return (
-                      <div
-                        key={pillar}
-                        onClick={() => {
-                          if (!isLimitReached || isSelected) {
-                            handlePillarClick(pillar);
-                          }
-                        }}
-                        className={`flex items-center space-x-3 p-4 rounded-xl border transition-all select-none ${isLimitReached
-                            ? "opacity-40 cursor-not-allowed border-zinc-800 bg-zinc-900"
-                            : isSelected
-                              ? "border-yellow-500 bg-zinc-900/50 shadow-sm ring-1 ring-yellow-500 cursor-pointer"
-                              : "border-zinc-800 bg-zinc-900 hover:border-zinc-700 hover:bg-zinc-800 cursor-pointer"
-                          }`}
-                      >
-                        <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-colors ${isSelected ? "bg-yellow-500 border-yellow-500 text-zinc-950" : "border-zinc-700 bg-zinc-950"
-                          }`}>
-                          {isSelected && (
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
+                    {/* ── SECTION 1: Personal Information ── */}
+                    <section className="p-6 sm:p-8">
+                        <SectionHeader
+                            number="1"
+                            title="Personal Information"
+                            description="Your contact and identification details."
+                        />
+
+                        <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+                            <Field label="First Name" required error={touched.firstName ? errors.firstName : undefined}>
+                                <input
+                                    type="text"
+                                    value={firstName}
+                                    onChange={(e) => setFirstName(e.target.value)}
+                                    onBlur={() => touch('firstName')}
+                                    placeholder="e.g. Nimal"
+                                    className={fieldClass(!!touched.firstName, !!errors.firstName)}
+                                />
+                            </Field>
+
+                            <Field label="Last Name" required error={touched.lastName ? errors.lastName : undefined}>
+                                <input
+                                    type="text"
+                                    value={lastName}
+                                    onChange={(e) => setLastName(e.target.value)}
+                                    onBlur={() => touch('lastName')}
+                                    placeholder="e.g. Perera"
+                                    className={fieldClass(!!touched.lastName, !!errors.lastName)}
+                                />
+                            </Field>
+
+                            <Field label="Email" required error={touched.email ? errors.email : undefined}>
+                                <input
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    onBlur={() => touch('email')}
+                                    placeholder="e.g. nimal@gmail.com"
+                                    className={fieldClass(!!touched.email, !!errors.email)}
+                                />
+                            </Field>
+
+                            <Field label="WhatsApp Number" required error={touched.whatsappNumber ? errors.whatsappNumber : undefined}>
+                                <input
+                                    type="tel"
+                                    value={whatsappNumber}
+                                    onChange={(e) => setWhatsappNumber(e.target.value)}
+                                    onBlur={() => touch('whatsappNumber')}
+                                    placeholder={formConfig.phone_hint}
+                                    className={fieldClass(!!touched.whatsappNumber, !!errors.whatsappNumber)}
+                                />
+                            </Field>
+
+                            <Field label="Date of Birth" required error={touched.dob ? errors.dob : undefined}>
+                                <input
+                                    type="date"
+                                    value={dob}
+                                    onChange={(e) => setDob(e.target.value)}
+                                    onBlur={() => touch('dob')}
+                                    className={`${fieldClass(!!touched.dob, !!errors.dob)} [&::-webkit-calendar-picker-indicator]:cursor-pointer`}
+                                />
+                            </Field>
+
+                            <Field label="Address" required error={touched.address ? errors.address : undefined} className="sm:col-span-2">
+                                <textarea
+                                    rows={2}
+                                    value={address}
+                                    onChange={(e) => setAddress(e.target.value)}
+                                    onBlur={() => touch('address')}
+                                    placeholder="Enter your residential address..."
+                                    className={`w-full px-3.5 py-2.5 text-sm rounded-lg border bg-white text-zinc-900 placeholder:text-zinc-400 outline-none transition-colors resize-none ${touched.address && errors.address ? errorInput : validInput}`}
+                                />
+                            </Field>
+                        </div>
+                    </section>
+
+                    <Divider />
+
+                    {/* ── SECTION 2: Academic Details ── */}
+                    <section className="p-6 sm:p-8">
+                        <SectionHeader
+                            number="2"
+                            title="Academic Details"
+                            description="Your university and course information."
+                        />
+
+                        <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5 items-start">
+                            {/* University */}
+                            {singleUniversity ? (
+                                <Field label="University" required>
+                                    <input
+                                        value={formConfig.eligible_universities[0] || 'University of Moratuwa'}
+                                        readOnly
+                                        className={`${baseInput} border-zinc-200 bg-zinc-50 text-zinc-500 cursor-not-allowed`}
+                                    />
+                                </Field>
+                            ) : (
+                                <Field label="University" required error={touched.university ? errors.university : undefined}>
+                                    <Select value={university} onValueChange={(v) => { setUniversity(v); touch('university'); }}>
+                                        <SelectTrigger className={`${baseInput} ${touched.university && errors.university ? errorInput : validInput} data-[placeholder]:text-zinc-400`}>
+                                            <SelectValue placeholder="Select university" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {formConfig.eligible_universities.map((u) => (
+                                                <SelectItem key={u} value={u}>{u}</SelectItem>
+                                            ))}
+                                            <SelectItem value="__OTHER__">Other — type below</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    {university === '__OTHER__' && (
+                                        <input
+                                            type="text"
+                                            value={universityOther}
+                                            onChange={(e) => setUniversityOther(e.target.value)}
+                                            onBlur={() => touch('university')}
+                                            placeholder="Type your university name..."
+                                            className={`${baseInput} mt-2 ${touched.university && !universityOther.trim() ? errorInput : validInput}`}
+                                            autoFocus
+                                        />
+                                    )}
+                                </Field>
+                            )}
+
+                            <Field label="Index Number" required error={touched.indexNumber ? errors.indexNumber : undefined}>
+                                <input
+                                    type="text"
+                                    value={indexNumber}
+                                    onChange={(e) => setIndexNumber(e.target.value)}
+                                    onBlur={() => touch('indexNumber')}
+                                    placeholder={formConfig.index_number_hint}
+                                    className={fieldClass(!!touched.indexNumber, !!errors.indexNumber)}
+                                />
+                            </Field>
+
+                            <Field label="Faculty" required error={touched.faculty ? errors.faculty : undefined}>
+                                <Select value={faculty} onValueChange={(v) => { setFaculty(v); touch('faculty'); }}>
+                                    <SelectTrigger className={`${baseInput} ${touched.faculty && errors.faculty ? errorInput : validInput} data-[placeholder]:text-zinc-400`}>
+                                        <SelectValue placeholder="Select faculty" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {formConfig.eligible_faculties.map((f) => (
+                                            <SelectItem key={f} value={f}>{f}</SelectItem>
+                                        ))}
+                                        <SelectItem value="__OTHER__">Other — type below</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                {faculty === '__OTHER__' && (
+                                    <input
+                                        type="text"
+                                        value={facultyOther}
+                                        onChange={(e) => setFacultyOther(e.target.value)}
+                                        onBlur={() => touch('faculty')}
+                                        placeholder="Type your faculty name..."
+                                        className={`${baseInput} mt-2 ${touched.faculty && !facultyOther.trim() ? errorInput : validInput}`}
+                                        autoFocus
+                                    />
+                                )}
+                            </Field>
+
+                            <Field label="Department / Course" required error={touched.department ? errors.department : undefined}>
+                                <input
+                                    type="text"
+                                    value={department}
+                                    onChange={(e) => setDepartment(e.target.value)}
+                                    onBlur={() => touch('department')}
+                                    placeholder="e.g. CSE, Civil, Textile"
+                                    className={fieldClass(!!touched.department, !!errors.department)}
+                                />
+                            </Field>
+
+                            <Field label="Batch" required error={touched.batch ? errors.batch : undefined}>
+                                <Select value={batch} onValueChange={(v) => { setBatch(v); touch('batch'); }}>
+                                    <SelectTrigger className={`${baseInput} ${touched.batch && errors.batch ? errorInput : validInput} data-[placeholder]:text-zinc-400`}>
+                                        <SelectValue placeholder="Select batch" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {formConfig.eligible_batches.map((b) => (
+                                            <SelectItem key={b} value={b}>{b}</SelectItem>
+                                        ))}
+                                        <SelectItem value="__OTHER__">Other — type below</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                {batch === '__OTHER__' && (
+                                    <input
+                                        type="text"
+                                        value={batchOther}
+                                        onChange={(e) => setBatchOther(e.target.value)}
+                                        onBlur={() => touch('batch')}
+                                        placeholder="Type your batch or intake year..."
+                                        className={`${baseInput} mt-2 ${touched.batch && !batchOther.trim() ? errorInput : validInput}`}
+                                        autoFocus
+                                    />
+                                )}
+                            </Field>
+                        </div>
+                    </section>
+
+                    <Divider />
+
+                    {/* ── SECTION 3: Pillar Selection ── */}
+                    <section className="p-6 sm:p-8">
+                        <SectionHeader
+                            number="3"
+                            title="Applied Pillars"
+                            description={`Choose up to 3 pillars you wish to apply for. (${selectedPillars.length}/3 selected)`}
+                        />
+
+                        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {pillars.map((pillar) => {
+                                const isSelected = selectedPillars.includes(pillar);
+                                const isDisabled = selectedPillars.length >= 3 && !isSelected;
+
+                                return (
+                                    <button
+                                        key={pillar}
+                                        type="button"
+                                        onClick={() => !isDisabled && handlePillarClick(pillar)}
+                                        className={`flex items-center gap-3 w-full p-3.5 rounded-xl border text-left transition-all ${isDisabled
+                                            ? 'opacity-40 cursor-not-allowed border-zinc-200 bg-zinc-50'
+                                            : isSelected
+                                                ? 'border-red-500 bg-red-50 ring-1 ring-red-200 cursor-pointer'
+                                                : 'border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50 cursor-pointer'
+                                            }`}
+                                    >
+                                        <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'bg-red-600 border-red-600' : 'border-zinc-300 bg-white'}`}>
+                                            {isSelected && (
+                                                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            )}
+                                        </span>
+                                        <span className={`text-sm font-medium ${isSelected ? 'text-red-800' : 'text-zinc-600'}`}>
+                                            {pillar}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        {touched.pillars && errors.pillars && (
+                            <p className="text-xs text-red-600 mt-2">{errors.pillars}</p>
+                        )}
+                    </section>
+
+                    <Divider />
+
+                    {/* ── SECTION 4: Documents & Optional ── */}
+                    <section className="p-6 sm:p-8">
+                        <SectionHeader
+                            number="4"
+                            title="Documents & Additional Info"
+                            description="Upload your CV and share any extra details."
+                        />
+
+                        <div className="mt-6 space-y-5">
+                            <Field label="CV / Resume" required error={touched.cv ? errors.cv : undefined}>
+                                <input
+                                    type="file"
+                                    accept=".pdf,.docx"
+                                    onChange={(e) => { setCvFile(e.target.files?.[0] || null); touch('cv'); }}
+                                    className={`${fieldClass(!!touched.cv, !!errors.cv)} py-1.5 cursor-pointer file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-zinc-100 file:text-zinc-700 hover:file:bg-zinc-200`}
+                                />
+                                <p className="text-xs text-zinc-400 mt-1.5">PDF or DOCX only · Max 5 MB</p>
+                            </Field>
+
+                            <Field label="Portfolio / LinkedIn URL" error={touched.portfolioUrl ? errors.portfolioUrl : undefined}>
+                                <input
+                                    type="url"
+                                    value={portfolioUrl}
+                                    onChange={(e) => setPortfolioUrl(e.target.value)}
+                                    onBlur={() => touch('portfolioUrl')}
+                                    placeholder="https://linkedin.com/in/..."
+                                    className={fieldClass(!!touched.portfolioUrl, !!errors.portfolioUrl)}
+                                />
+                            </Field>
+
+                            <Field label="Skills / Interests">
+                                <textarea
+                                    rows={3}
+                                    value={interests}
+                                    onChange={(e) => setInterests(e.target.value)}
+                                    placeholder="e.g. Drama, volunteer work, music, football..."
+                                    className={`w-full px-3.5 py-2.5 text-sm rounded-lg border border-zinc-300 bg-white text-zinc-900 placeholder:text-zinc-400 outline-none transition-colors resize-none focus:border-red-400 focus:ring-2 focus:ring-red-100`}
+                                />
+                            </Field>
+
+                            <Field label="Clubs / Societies / Experience">
+                                <textarea
+                                    rows={3}
+                                    value={clubs}
+                                    onChange={(e) => setClubs(e.target.value)}
+                                    placeholder="e.g. Leo Club, Rotaract, IEEE, AIESEC..."
+                                    className={`w-full px-3.5 py-2.5 text-sm rounded-lg border border-zinc-300 bg-white text-zinc-900 placeholder:text-zinc-400 outline-none transition-colors resize-none focus:border-red-400 focus:ring-2 focus:ring-red-100`}
+                                />
+                            </Field>
+                        </div>
+                    </section>
+
+                    <Divider />
+
+                    {/* ── SECTION 5: Security & Submit ── */}
+                    <section className="p-6 sm:p-8">
+                        <Label className="text-sm font-medium text-zinc-700">Security Verification</Label>
+                        <div className="mt-3">
+                            <Turnstile
+                                key={turnstileKey}
+                                siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
+                                onSuccess={(token) => setTurnstileToken(token)}
+                                onError={() => setTurnstileToken(null)}
+                                onExpire={() => setTurnstileToken(null)}
+                                options={{ theme: 'light' }}
+                            />
                         </div>
 
-                        <span className={`text-sm font-medium ${isSelected ? "text-white font-semibold" : "text-zinc-400"}`}>
-                          {pillar}
-                        </span>
-                      </div>
-                    );
-                  })}
+                        <div className="mt-6 flex flex-col sm:flex-row gap-3">
+                            <button
+                                type="submit"
+                                disabled={!isFormValid || isSubmitting || isFormClosed || !turnstileToken}
+                                className="flex-1 sm:flex-none sm:min-w-[180px] h-11 px-8 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                        </svg>
+                                        Submitting…
+                                    </>
+                                ) : (
+                                    'Submit Application'
+                                )}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleClear}
+                                disabled={isSubmitting || isFormClosed}
+                                className="h-11 px-6 border border-zinc-300 text-zinc-600 rounded-xl text-sm font-medium hover:bg-zinc-50 hover:text-zinc-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Clear Form
+                            </button>
+                        </div>
+                    </section>
+                </fieldset>
+            </form>
+
+            {/* Success Modal */}
+            {showSuccessModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+                    <div className="bg-white border border-zinc-200 rounded-2xl p-8 max-w-md w-full shadow-xl text-center space-y-4">
+                        <div className="w-14 h-14 bg-emerald-50 border border-emerald-200 rounded-full flex items-center justify-center mx-auto">
+                            <svg className="w-7 h-7 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                        </div>
+                        <h3 className="text-xl font-bold text-zinc-900">Application Submitted!</h3>
+                        <p className="text-sm text-zinc-500">
+                            Thank you for applying to MoraSpirit. Your application has been received and is
+                            currently pending review. We will contact you if you are selected.
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => setShowSuccessModal(false)}
+                            className="w-full h-11 bg-red-600 text-white rounded-xl font-semibold text-sm hover:bg-red-700 transition-colors"
+                        >
+                            Got It
+                        </button>
+                    </div>
                 </div>
-                {touched.pillars && errors.pillars && <p className="text-xs text-red-500 mt-1">{errors.pillars}</p>}
-              </div>
-
-              <div className="space-y-2 md:col-span-2 pt-2">
-                <Label htmlFor="cv" className="text-zinc-300 font-medium">
-                  CV / Resume <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="cv"
-                  type="file"
-                  accept=".pdf,.docx"
-                  value={cvFile ? undefined : ''}
-                  onChange={(e) => {
-                    setCvFile(e.target.files?.[0] || null);
-                    setTouched(prev => ({ ...prev, cv: true }));
-                  }}
-                  className={`bg-zinc-900 border text-white file:text-white h-10 px-3.5 py-1.5 text-sm cursor-pointer outline-none transition-colors ${touched.cv && errors.cv ? 'border-red-500 ring-1 ring-red-500 focus-visible:ring-red-500 focus-visible:border-red-500' : 'border-zinc-800 focus-visible:ring-1 focus-visible:ring-yellow-500 focus-visible:border-yellow-500'}`}
-                />
-                <p className="text-xs text-zinc-500">PDF/DOCX only, Max 5MB.</p>
-                {touched.cv && errors.cv && <p className="text-xs text-red-500 mt-1">{errors.cv}</p>}
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="portfolio" className="text-zinc-300 font-medium">
-                  Portfolio / LinkedIn URL
-                </Label>
-                <Input
-                  id="portfolio"
-                  type="url"
-                  value={portfolioUrl}
-                  onChange={(e) => setPortfolioUrl(e.target.value)}
-                  placeholder="https://linkedin.com/in/..."
-                  className="bg-zinc-900 border border-zinc-800 text-white placeholder:text-zinc-600 h-10 px-3.5 text-sm outline-none transition-colors focus-visible:ring-1 focus-visible:ring-yellow-500 focus-visible:border-yellow-500"
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="interests" className="text-zinc-300 font-medium">
-                  Skills / Interests
-                </Label>
-                <textarea
-                  id="interests"
-                  rows={2}
-                  value={interests}
-                  onChange={(e) => setInterests(e.target.value)}
-                  placeholder="e.g. Drama, Volunteer, Music, Football..."
-                  className="w-full bg-zinc-900 border border-zinc-800 text-white placeholder:text-zinc-600 rounded-xl p-3 text-sm outline-none transition-colors focus:ring-1 focus:ring-yellow-500 focus:border-yellow-500 resize-none"
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="cls" className="text-zinc-300 font-medium">
-                  Clubs / Societies / Experience
-                </Label>
-                <textarea
-                  id="cls"
-                  rows={2}
-                  value={clubs}
-                  onChange={(e) => setClubs(e.target.value)}
-                  placeholder="e.g. Leo Club, Rotaract, IEEE..."
-                  className="w-full bg-zinc-900 border border-zinc-800 text-white placeholder:text-zinc-600 rounded-xl p-3 text-sm outline-none transition-colors focus:ring-1 focus:ring-yellow-500 focus:border-yellow-500 resize-none"
-                />
-              </div>
-
-            </div>
-          </div>
-
-          {/* Cloudflare Turnstile Verification */}
-          <div className="pt-4 flex flex-col gap-2">
-            <Label className="text-zinc-300 font-medium">Security Verification</Label>
-            <Turnstile
-              key={turnstileKey}
-              siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
-              onSuccess={(token) => setTurnstileToken(token)}
-              onError={() => setTurnstileToken(null)}
-              onExpire={() => setTurnstileToken(null)}
-              options={{
-                theme: 'dark',
-              }}
-            />
-          </div>
-
-          <div className="flex items-center gap-4 pt-6">
-            <button
-              type="submit"
-              disabled={!isFormValid || isSubmitting || isFormClosed || !turnstileToken}
-              className="py-3 px-8 bg-red-600 text-white rounded-xl text-base font-semibold hover:bg-red-700 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center min-w-[180px]"
-            >
-              {isSubmitting ? (
-                <span className="flex items-center gap-2">
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Submitting...
-                </span>
-              ) : (
-                "Submit Application"
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={handleClear}
-              disabled={isSubmitting || isFormClosed}
-              className="py-3 px-6 bg-zinc-900 border border-zinc-700 text-zinc-300 rounded-xl text-base font-medium hover:bg-zinc-800 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Clear Form
-            </button>
-          </div>
-
-        </fieldset>
-      </form>
-
-      {/* Success Modal */}
-      {showSuccessModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 max-w-md w-full shadow-2xl text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-red-600/20 text-yellow-500 rounded-full flex items-center justify-center mx-auto mb-2 border border-red-500/30">
-              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-bold text-white">Application Submitted!</h3>
-            <p className="text-sm text-zinc-400">
-              Thank you for applying. Your application has been successfully received and is currently pending review.
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowSuccessModal(false)}
-              className="w-full py-3 bg-red-600 text-white rounded-xl font-semibold text-sm hover:bg-red-700 transition-colors shadow-sm mt-4"
-            >
-              Got It
-            </button>
-          </div>
+            )}
         </div>
-      )}
-    </div>
-  );
+    );
+}
+
+// ── Small layout helpers ──────────────────────────────────────────────────────
+
+function SectionHeader({
+    number,
+    title,
+    description,
+}: {
+    number: string;
+    title: string;
+    description?: string;
+}) {
+    return (
+        <div className="flex items-start gap-3">
+            <span className="w-7 h-7 rounded-full bg-red-600 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                {number}
+            </span>
+            <div>
+                <h3 className="text-base font-semibold text-zinc-900">{title}</h3>
+                {description && <p className="text-sm text-zinc-500 mt-0.5">{description}</p>}
+            </div>
+        </div>
+    );
+}
+
+function Divider() {
+    return <hr className="border-zinc-100" />;
+}
+
+function Field({
+    label,
+    required,
+    error,
+    children,
+    className,
+}: {
+    label: string;
+    required?: boolean;
+    error?: string;
+    children: React.ReactNode;
+    className?: string;
+}) {
+    return (
+        <div className={className}>
+            <label className="block text-sm font-medium text-zinc-700 mb-1.5">
+                {label}
+                {required && <span className="text-red-500 ml-0.5">*</span>}
+                {!required && <span className="text-zinc-400 font-normal ml-1">(optional)</span>}
+            </label>
+            {children}
+            {error && <p className="text-xs text-red-600 mt-1.5">{error}</p>}
+        </div>
+    );
 }
