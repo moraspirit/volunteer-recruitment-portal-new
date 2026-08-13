@@ -47,7 +47,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
         }
 
-        const salt = await bcrypt.genSalt(10);
+        const salt = await bcrypt.genSalt(12);
         const password_hash = await bcrypt.hash(password, salt);
 
         const { data, error } = await supabaseAdmin
