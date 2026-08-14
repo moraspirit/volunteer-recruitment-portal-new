@@ -10,6 +10,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import CountdownTimer from '@/components/CountdownTimer';
+import { allowedPillarSlugs } from '@/lib/pillarAccess';
 import { Turnstile } from '@marsidev/react-turnstile';
 
 interface FormConfig {
@@ -21,11 +22,14 @@ interface FormConfig {
     index_number_hint: string;
     phone_hint: string;
     allow_multi_university: boolean;
+    pillar_access: Record<string, string[]>;
+    default_pillars: string[] | null;
 }
 
 interface Pillar {
     id: string;
     name: string;
+    slug: string;
 }
 
 const FALLBACK_CONFIG: FormConfig = {
@@ -44,20 +48,24 @@ const FALLBACK_CONFIG: FormConfig = {
     index_number_hint: 'e.g. 220123X',
     phone_hint: 'e.g. 0712345678 or +94712345678',
     allow_multi_university: false,
+    pillar_access: {},
+    default_pillars: null,
 };
 
-const FALLBACK_PILLARS = [
-    'Announcing and Hosting Pillar',
-    'Corporate Development Pillar',
-    'Creative Design Pillar',
-    'Editorial Pillar',
-    'Financial Controlling Panel',
-    'Human Resources Management Pillar',
-    'Marketing Pillar',
-    'Photography Pillar',
-    'Special Projects Pillar',
-    'Video Editing & Live Streaming Pillar',
-    'Web and Technology Pillar',
+// Only used if /api/pillars is unreachable. Slugs must match the `pillars`
+// table — a mismatch filters every pillar out and leaves the form empty.
+const FALLBACK_PILLARS: Pillar[] = [
+    { id: 'f1', name: 'Announcing and Hosting Pillar', slug: 'announcing' },
+    { id: 'f2', name: 'Corporate Development Pillar', slug: 'corporate' },
+    { id: 'f3', name: 'Creative Design Pillar', slug: 'creative' },
+    { id: 'f4', name: 'Editorial Pillar', slug: 'editorial' },
+    { id: 'f5', name: 'Financial Controlling Panel', slug: 'finance' },
+    { id: 'f6', name: 'Human Resources Management Pillar', slug: 'hr' },
+    { id: 'f7', name: 'Marketing Pillar', slug: 'marketing' },
+    { id: 'f8', name: 'Photography Pillar', slug: 'photography' },
+    { id: 'f9', name: 'Special Projects Pillar', slug: 'special' },
+    { id: 'f10', name: 'Video Editing & Live Streaming Pillar', slug: 'video' },
+    { id: 'f11', name: 'Web and Technology Pillar', slug: 'web' },
 ];
 
 // Shared input class helpers
@@ -72,7 +80,7 @@ function fieldClass(touched: boolean, hasError: boolean) {
 
 export default function ApplicationForm() {
     const [formConfig, setFormConfig] = useState<FormConfig>(FALLBACK_CONFIG);
-    const [pillars, setPillars] = useState<string[]>(FALLBACK_PILLARS);
+    const [pillars, setPillars] = useState<Pillar[]>(FALLBACK_PILLARS);
     const [configLoaded, setConfigLoaded] = useState(false);
 
     // Form fields
@@ -125,7 +133,7 @@ export default function ApplicationForm() {
 
                 if (pillarsRes.ok) {
                     const { pillars: pData } = await pillarsRes.json();
-                    if (pData?.length) setPillars(pData.map((p: Pillar) => p.name));
+                    if (pData?.length) setPillars(pData);
                 }
 
                 if (settingsRes.ok) {
@@ -154,6 +162,29 @@ export default function ApplicationForm() {
     const resolvedFaculty    = faculty    === '__OTHER__' ? facultyOther.trim()    : faculty;
     const resolvedBatch      = batch      === '__OTHER__' ? batchOther.trim()      : batch;
     const resolvedUniversity = university === '__OTHER__' ? universityOther.trim() : university;
+
+    // Pillars this university is actually recruiting for. Mirrors the check in
+    // /api/apply — the server rejects anything outside this set regardless.
+    const visiblePillars = useMemo(() => {
+        const allowed = new Set(
+            allowedPillarSlugs(
+                resolvedUniversity,
+                formConfig.pillar_access,
+                formConfig.default_pillars,
+                pillars.map((p) => p.slug),
+            ),
+        );
+        return pillars.filter((p) => allowed.has(p.slug));
+    }, [resolvedUniversity, formConfig.pillar_access, formConfig.default_pillars, pillars]);
+
+    // Switching university can strip pillars the applicant already ticked.
+    useEffect(() => {
+        const names = new Set(visiblePillars.map((p) => p.name));
+        setSelectedPillars((prev) => {
+            const next = prev.filter((n) => names.has(n));
+            return next.length === prev.length ? prev : next;
+        });
+    }, [visiblePillars]);
 
     const touch = (f: string) => setTouched((p) => ({ ...p, [f]: true }));
 
@@ -504,8 +535,21 @@ export default function ApplicationForm() {
                             description={`Choose up to 3 pillars you wish to apply for. (${selectedPillars.length}/3 selected)`}
                         />
 
+                        {!resolvedUniversity && (
+                            <p className="mt-4 text-sm text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-xl p-4">
+                                Select your university above to see the pillars recruiting from it.
+                            </p>
+                        )}
+
+                        {resolvedUniversity && visiblePillars.length === 0 && (
+                            <p className="mt-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-4">
+                                There are no pillars currently recruiting from {resolvedUniversity}.
+                                Please check back later.
+                            </p>
+                        )}
+
                         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                            {pillars.map((pillar) => {
+                            {visiblePillars.map(({ name: pillar }) => {
                                 const isSelected = selectedPillars.includes(pillar);
                                 const isDisabled = selectedPillars.length >= 3 && !isSelected;
 

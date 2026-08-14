@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { verifyToken } from '@/lib/auth';
+import { getAdminSession } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 const DEFAULTS = {
@@ -20,17 +19,16 @@ const DEFAULTS = {
     index_number_hint: 'e.g. 220123X',
     phone_hint: 'e.g. 0712345678 or +94712345678',
     allow_multi_university: false,
+    pillar_access: {} as Record<string, string[]>,
+    default_pillars: null as string[] | null,
 };
 
-async function getAdminPayload() {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('ms-admin-token')?.value;
-    if (!token) return null;
-    return verifyToken(token);
-}
+// Only these columns may be written through this endpoint. Spreading the raw
+// request body into the upsert would let a caller set any column on the row.
+const WRITABLE_FIELDS = Object.keys(DEFAULTS);
 
 export async function GET() {
-    const payload = await getAdminPayload();
+    const payload = await getAdminSession();
     if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     try {
@@ -47,15 +45,20 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-    const payload = await getAdminPayload();
+    const payload = await getAdminSession();
     if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     try {
         const body = await request.json();
 
+        const updates: Record<string, unknown> = {};
+        for (const field of WRITABLE_FIELDS) {
+            if (body[field] !== undefined) updates[field] = body[field];
+        }
+
         const { error } = await supabaseAdmin
             .from('app_config')
-            .upsert({ id: 1, ...body, updated_at: new Date().toISOString() });
+            .upsert({ id: 1, ...updates, updated_at: new Date().toISOString() });
 
         if (error) {
             console.error('Config update error:', error);

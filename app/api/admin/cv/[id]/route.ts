@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { verifyToken } from '@/lib/auth';
+import { getAdminSession } from '@/lib/auth';
 
 export async function GET(
     request: Request,
@@ -11,10 +10,8 @@ export async function GET(
         const resolvedParams = await params;
         const applicationId = resolvedParams.id;
 
-        // 1. Verify Admin Token via HttpOnly cookie
-        const cookieStore = await cookies();
-        const token = cookieStore.get('ms-admin-token')?.value;
-        if (!token || !(await verifyToken(token))) {
+        // 1. Verify Admin session via HttpOnly cookie
+        if (!(await getAdminSession())) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 

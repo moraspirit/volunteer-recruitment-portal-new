@@ -1,28 +1,13 @@
 import Link from 'next/link';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
 import Image from 'next/image';
 import LogoutButton from '../../components/LogoutButton';
+import { getSuperAdminSession } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-    let isSuperAdmin = false;
-
-    try {
-        const cookieStore = await cookies();
-        const token = cookieStore.get('ms-admin-token')?.value;
-        if (token) {
-            const secret = new TextEncoder().encode(process.env.JWT_SECRET);
-            const { payload } = await jwtVerify(token, secret);
-            isSuperAdmin = payload.role === 'super_admin';
-        }
-    } catch (error: any) {
-        if (error?.digest === 'DYNAMIC_SERVER_USAGE' || error?.message?.includes('Dynamic server usage')) {
-            throw error;
-        }
-        console.error('Failed to verify JWT in layout:', error);
-    }
+    // Controls nav visibility only — /admin/users enforces the role itself.
+    const isSuperAdmin = (await getSuperAdminSession()) !== null;
 
     return (
         <div className="min-h-screen bg-zinc-50 flex flex-col">

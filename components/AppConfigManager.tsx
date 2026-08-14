@@ -43,6 +43,16 @@ interface AppConfig {
     index_number_hint: string;
     phone_hint: string;
     allow_multi_university: boolean;
+    // University name → pillar slugs it recruits for. Universities absent from
+    // this map fall back to default_pillars.
+    pillar_access: Record<string, string[]>;
+    default_pillars: string[] | null;
+}
+
+interface Pillar {
+    id: string;
+    name: string;
+    slug: string;
 }
 
 export default function AppConfigManager() {
@@ -56,7 +66,11 @@ export default function AppConfigManager() {
         index_number_hint: 'e.g. 220123X',
         phone_hint: 'e.g. 0712345678 or +94712345678',
         allow_multi_university: false,
+        pillar_access: {},
+        default_pillars: null,
     });
+
+    const [pillars, setPillars] = useState<Pillar[]>([]);
 
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -68,14 +82,58 @@ export default function AppConfigManager() {
     const [newUniversity, setNewUniversity] = useState('');
 
     useEffect(() => {
-        fetch('/api/admin/config', { cache: 'no-store' })
-            .then((r) => r.json())
-            .then((data) => {
-                if (!data.error) setConfig(data);
+        Promise.all([
+            fetch('/api/admin/config', { cache: 'no-store' }).then((r) => r.json()),
+            fetch('/api/pillars', { cache: 'no-store' }).then((r) => r.json()),
+        ])
+            .then(([cfg, { pillars: pData }]) => {
+                if (!cfg.error) {
+                    setConfig({ ...cfg, pillar_access: cfg.pillar_access ?? {} });
+                }
+                if (pData?.length) setPillars(pData);
             })
             .catch(console.error)
             .finally(() => setIsLoading(false));
     }, []);
+
+    // Pillar slugs a university currently recruits for. No explicit entry means
+    // it inherits default_pillars — and no default means every pillar.
+    const slugsFor = (uni: string): string[] => {
+        const entry = config.pillar_access?.[uni];
+        if (entry) return entry;
+        return config.default_pillars ?? pillars.map((p) => p.slug);
+    };
+
+    const usesDefault = (uni: string) => !config.pillar_access?.[uni];
+
+    const setSlugsFor = (uni: string, slugs: string[]) =>
+        setConfig((prev) => ({
+            ...prev,
+            pillar_access: { ...prev.pillar_access, [uni]: slugs },
+        }));
+
+    const togglePillarFor = (uni: string, slug: string) => {
+        const current = slugsFor(uni);
+        setSlugsFor(uni, current.includes(slug) ? current.filter((s) => s !== slug) : [...current, slug]);
+    };
+
+    // Drop the explicit entry so this university follows the default set again.
+    const resetToDefault = (uni: string) =>
+        setConfig((prev) => {
+            const next = { ...prev.pillar_access };
+            delete next[uni];
+            return { ...prev, pillar_access: next };
+        });
+
+    const toggleDefaultPillar = (slug: string) => {
+        const current = config.default_pillars ?? pillars.map((p) => p.slug);
+        setConfig((prev) => ({
+            ...prev,
+            default_pillars: current.includes(slug)
+                ? current.filter((s) => s !== slug)
+                : [...current, slug],
+        }));
+    };
 
     const handleSave = async () => {
         setIsSaving(true);
@@ -302,6 +360,129 @@ export default function AppConfigManager() {
                     <button onClick={addFaculty} className="px-3 h-9 bg-zinc-900 text-white rounded-lg text-sm font-medium hover:bg-zinc-700">
                         Add
                     </button>
+                </div>
+            </section>
+
+            {/* Pillars per University */}
+            <section className="bg-white border border-zinc-200 rounded-xl p-6 shadow-sm">
+                <h2 className="text-base font-semibold text-zinc-900">Pillars per University</h2>
+                <p className="text-xs text-zinc-500 mt-1 mb-5">
+                    Choose which pillars each university recruits for. Applicants only see — and can
+                    only be accepted into — the pillars ticked for their university.
+                </p>
+
+                {/* Default set */}
+                <div className="border border-zinc-200 rounded-xl p-4 mb-4 bg-zinc-50/60">
+                    <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+                        <div>
+                            <h3 className="text-sm font-semibold text-zinc-900">Default set</h3>
+                            <p className="text-xs text-zinc-500 mt-0.5">
+                                Used for any university without its own selection below, including
+                                custom names applicants type in the &ldquo;Other&rdquo; box.
+                            </p>
+                        </div>
+                        <span className="text-xs font-medium text-zinc-500 shrink-0">
+                            {(config.default_pillars ?? pillars.map((p) => p.slug)).length} of {pillars.length}
+                        </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                        {pillars.map((p) => {
+                            const checked = (config.default_pillars ?? pillars.map((x) => x.slug)).includes(p.slug);
+                            return (
+                                <label
+                                    key={p.slug}
+                                    className="flex items-center gap-2.5 text-sm text-zinc-700 cursor-pointer hover:bg-white rounded-md px-2 py-1.5 transition-colors"
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => toggleDefaultPillar(p.slug)}
+                                        className="w-4 h-4 rounded border-zinc-300 accent-zinc-900"
+                                    />
+                                    {p.name}
+                                </label>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Per-university overrides */}
+                <div className="space-y-3">
+                    {config.eligible_universities.map((uni) => {
+                        const selected = slugsFor(uni);
+                        const inherited = usesDefault(uni);
+                        return (
+                            <div key={uni} className="border border-zinc-200 rounded-xl p-4">
+                                <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <h3 className="text-sm font-semibold text-zinc-900">{uni}</h3>
+                                        {inherited && (
+                                            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-500">
+                                                using default
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <span className="text-xs font-medium text-zinc-500">
+                                            {selected.length} of {pillars.length}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSlugsFor(uni, pillars.map((p) => p.slug))}
+                                            className="text-xs px-2 py-1 border border-zinc-200 rounded-md hover:bg-zinc-50 text-zinc-600 font-medium"
+                                        >
+                                            All
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSlugsFor(uni, [])}
+                                            className="text-xs px-2 py-1 border border-zinc-200 rounded-md hover:bg-zinc-50 text-zinc-600 font-medium"
+                                        >
+                                            None
+                                        </button>
+                                        {!inherited && (
+                                            <button
+                                                type="button"
+                                                onClick={() => resetToDefault(uni)}
+                                                className="text-xs px-2 py-1 border border-zinc-200 rounded-md hover:bg-zinc-50 text-zinc-600 font-medium"
+                                            >
+                                                Use default
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                    {pillars.map((p) => (
+                                        <label
+                                            key={p.slug}
+                                            className="flex items-center gap-2.5 text-sm text-zinc-700 cursor-pointer hover:bg-zinc-50 rounded-md px-2 py-1.5 transition-colors"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={selected.includes(p.slug)}
+                                                onChange={() => togglePillarFor(uni, p.slug)}
+                                                className="w-4 h-4 rounded border-zinc-300 accent-zinc-900"
+                                            />
+                                            {p.name}
+                                        </label>
+                                    ))}
+                                </div>
+
+                                {selected.length === 0 && (
+                                    <p className="text-xs text-amber-700 mt-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                        No pillars selected — applicants from {uni} will not be able to apply.
+                                    </p>
+                                )}
+                            </div>
+                        );
+                    })}
+
+                    {config.eligible_universities.length === 0 && (
+                        <p className="text-sm text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-xl p-4">
+                            Add at least one university above to configure its pillars.
+                        </p>
+                    )}
                 </div>
             </section>
 

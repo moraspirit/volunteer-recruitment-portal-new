@@ -1,21 +1,14 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { verifyToken } from '@/lib/auth';
+import { getSuperAdminSession } from '@/lib/auth';
 
 export async function DELETE(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const cookieStore = await cookies();
-        const token = cookieStore.get('ms-admin-token')?.value;
-        if (!token) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-        }
-
-        const decoded = (await verifyToken(token)) as any;
-        if (!decoded || decoded.role !== 'super_admin') {
+        const decoded = await getSuperAdminSession();
+        if (!decoded) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 

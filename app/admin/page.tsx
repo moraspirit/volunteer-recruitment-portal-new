@@ -1,12 +1,15 @@
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import AdminTable from '@/components/AdminTable';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getAdminSession } from '@/lib/auth';
+
+export const dynamic = 'force-dynamic';
 
 export default async function AdminDashboard() {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('ms-admin-token')?.value;
-    if (!token) redirect('/admin/login');
+    // Verify the signature, not just that a cookie exists — this page returns
+    // every applicant's PII, so the check has to actually mean something.
+    const session = await getAdminSession();
+    if (!session) redirect('/admin/login');
 
     const { data: applications, error } = await supabaseAdmin
         .from('applications')
@@ -22,25 +25,22 @@ export default async function AdminDashboard() {
         console.error('Failed to fetch applications:', error);
     }
 
-    // Attach signed CV URLs (60 s expiry, generated server-side)
-    const appsWithUrls = await Promise.all(
-        (applications || []).map(async (app) => {
-            let cvUrl: string | null = null;
-            if (app.cv_path) {
-                const { data } = await supabaseAdmin.storage
-                    .from('cvs')
-                    .createSignedUrl(app.cv_path, 60);
-                cvUrl = data?.signedUrl ?? null;
-            }
+    // Point CV links at our own auth-gated endpoint, which mints a fresh 60 s
+    // signed URL on every request. Never bake a signed URL into the page — it
+    // expires long before the admin clicks it, and is already dead by the time
+    // an exported CSV is opened.
+    const appsWithUrls = (applications || []).map((app) => {
+        const selectedPillars = app.application_pillars
+            .map((ap: any) => ap.pillars?.name)
+            .filter(Boolean)
+            .join(', ');
 
-            const selectedPillars = app.application_pillars
-                .map((ap: any) => ap.pillars?.name)
-                .filter(Boolean)
-                .join(', ');
-
-            return { ...app, cvUrl, selectedPillars };
-        })
-    );
+        return {
+            ...app,
+            cvUrl: app.cv_path ? `/api/admin/cv/${app.id}` : null,
+            selectedPillars,
+        };
+    });
 
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">

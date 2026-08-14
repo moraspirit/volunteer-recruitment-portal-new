@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { verifyToken } from '@/lib/auth';
+import { getAdminSession } from '@/lib/auth';
+
+const VALID_STATUSES = ['PENDING', 'APPROVED', 'REJECTED'];
 
 // GET: Fetch single application details
 export async function GET(
@@ -12,9 +13,7 @@ export async function GET(
         const resolvedParams = await params;
         const applicationId = resolvedParams.id;
 
-        const cookieStore = await cookies();
-        const token = cookieStore.get('ms-admin-token')?.value;
-        if (!token || !(await verifyToken(token))) {
+        if (!(await getAdminSession())) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -51,19 +50,23 @@ export async function PATCH(
         const applicationId = resolvedParams.id;
 
         // 1. Verify token and extract Admin ID for the Audit Log
-        const cookieStore = await cookies();
-        const token = cookieStore.get('ms-admin-token')?.value;
-        if (!token) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const decodedAdmin = await verifyToken(token) as any;
-        if (!decodedAdmin || !decodedAdmin.id) {
+        const decodedAdmin = await getAdminSession();
+        if (!decodedAdmin) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
         const body = await request.json();
         const { status, hr_notes } = body;
+
+        // Reject unknown statuses here rather than relying on the DB CHECK
+        // constraint, which surfaces as an opaque 500.
+        if (status !== undefined && !VALID_STATUSES.includes(status)) {
+            return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+        }
+
+        if (hr_notes !== undefined && hr_notes !== null && typeof hr_notes !== 'string') {
+            return NextResponse.json({ error: 'Invalid hr_notes' }, { status: 400 });
+        }
 
         // 2. Update the Application
         const { data, error } = await supabaseAdmin

@@ -1,18 +1,7 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { verifyToken } from '@/lib/auth';
-
-// Helper to verify if current user is super_admin
-async function verifySuperAdmin() {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('ms-admin-token')?.value;
-    if (!token) return null;
-    const decoded = (await verifyToken(token)) as any;
-    if (!decoded || decoded.role !== 'super_admin') return null;
-    return decoded;
-}
+import { getSuperAdminSession as verifySuperAdmin } from '@/lib/auth';
 
 // GET: List all admins (Super Admin only)
 export async function GET() {

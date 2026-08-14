@@ -103,17 +103,19 @@ ALTER TABLE app_settings        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app_config          ENABLE ROW LEVEL SECURITY;
 
--- Seed default pillars
+-- Seed default pillars.
+-- Slugs are the stable identifier used by app_config.pillar_access and by the
+-- form's fallback list, so they must match across a fresh install and prod.
 INSERT INTO pillars (name, slug) VALUES
-    ('Announcing and Hosting Pillar',        'announcing-and-hosting'),
-    ('Corporate Development Pillar',         'corporate-development'),
-    ('Creative Design Pillar',               'creative-design'),
+    ('Announcing and Hosting Pillar',        'announcing'),
+    ('Corporate Development Pillar',         'corporate'),
+    ('Creative Design Pillar',               'creative'),
     ('Editorial Pillar',                     'editorial'),
-    ('Financial Controlling Panel',          'financial-controlling'),
-    ('Human Resources Management Pillar',    'human-resources'),
+    ('Financial Controlling Panel',          'finance'),
+    ('Human Resources Management Pillar',    'hr'),
     ('Marketing Pillar',                     'marketing'),
     ('Photography Pillar',                   'photography'),
-    ('Special Projects Pillar',              'special-projects'),
-    ('Video Editing & Live Streaming Pillar','video-editing'),
-    ('Web and Technology Pillar',            'web-and-technology')
+    ('Special Projects Pillar',              'special'),
+    ('Video Editing & Live Streaming Pillar','video'),
+    ('Web and Technology Pillar',            'web')
 ON CONFLICT (name) DO NOTHING;

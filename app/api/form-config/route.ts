@@ -18,13 +18,15 @@ const DEFAULTS = {
     index_number_hint: 'e.g. 220123X',
     phone_hint: 'e.g. 0712345678 or +94712345678',
     allow_multi_university: false,
+    pillar_access: {} as Record<string, string[]>,
+    default_pillars: null as string[] | null,
 };
 
 export async function GET() {
     try {
         const { data } = await supabaseAdmin
             .from('app_config')
-            .select('app_name,app_year,app_description,eligible_universities,eligible_batches,eligible_faculties,index_number_hint,phone_hint,allow_multi_university')
+            .select('app_name,app_year,app_description,eligible_universities,eligible_batches,eligible_faculties,index_number_hint,phone_hint,allow_multi_university,pillar_access,default_pillars')
             .eq('id', 1)
             .single();
 

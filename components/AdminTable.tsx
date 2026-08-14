@@ -133,7 +133,12 @@ export default function AdminTable({ initialApplications }: { initialApplication
             'Clubs / Societies',
             'Status',
             'HR Notes',
+            'CV Link',
         ];
+
+        // Absolute URL so the link still resolves when the CSV is opened
+        // outside the browser (Excel, Sheets, email).
+        const origin = window.location.origin;
 
         const rows = toExport.map((app) =>
             [
@@ -154,9 +159,17 @@ export default function AdminTable({ initialApplications }: { initialApplication
                 app.interests || '',
                 app.clubs || '',
                 app.status || 'PENDING',
-                (app.hr_notes || '').replace(/"/g, '""'),
+                app.hr_notes || '',
+                app.cvUrl ? `${origin}${app.cvUrl}` : '',
             ]
-                .map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`)
+                .map((v) => {
+                    let s = String(v ?? '');
+                    // A leading =, +, -, @, tab or CR makes Excel/Sheets treat
+                    // the cell as a formula. Applicant-supplied fields end up
+                    // in here, so neutralise them with a leading apostrophe.
+                    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+                    return `"${s.replace(/"/g, '""')}"`;
+                })
                 .join(',')
         );
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { applicationSchema } from '@/lib/validators';
+import { allowedPillarSlugs } from '@/lib/pillarAccess';
 import { applyRateLimit } from '@/lib/rateLimit';
 import { createClient } from '@supabase/supabase-js';
 
@@ -88,12 +89,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid file type. Only real PDF or DOCX allowed.' }, { status: 400 });
     }
 
-    // 2. Verify Cloudflare Turnstile
-    const secretKey = process.env.TURNSTILE_SECRET_KEY || '1x0000000000000000000000000000000AA';
+    // 2. Verify Cloudflare Turnstile.
+    // No fallback secret: '1x0000...AA' is Cloudflare's test key, which approves
+    // every token. Defaulting to it would silently disable bot protection if the
+    // variable were ever missing in production.
+    const secretKey = process.env.TURNSTILE_SECRET_KEY;
+    if (!secretKey) {
+      console.error('TURNSTILE_SECRET_KEY is not set — refusing to accept submissions.');
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
+
+    // URLSearchParams encodes the values; string interpolation would let a
+    // crafted token inject extra form fields and override the secret.
     const turnstileVerify = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `secret=${secretKey}&response=${turnstileToken}`,
+      body: new URLSearchParams({ secret: secretKey, response: turnstileToken }),
     });
 
     const turnstileResult = await turnstileVerify.json();
@@ -104,6 +115,44 @@ export async function POST(request: Request) {
     // 3. Validate the JSON data securely
     const parsedData = JSON.parse(rawData);
     const validatedData = applicationSchema.parse(parsedData);
+
+    // 3b. Enforce per-university pillar access.
+    // The form only *displays* the permitted pillars; this is the check that
+    // actually enforces it, so a crafted request can't apply to a pillar its
+    // university was never offered. Runs before the upload so a rejected
+    // submission never leaves an orphaned CV in storage.
+    const [{ data: pillarRows }, { data: accessConfig }] = await Promise.all([
+      supabaseAdmin.from('pillars').select('id, name, slug'),
+      supabaseAdmin.from('app_config').select('pillar_access, default_pillars').eq('id', 1).single(),
+    ]);
+
+    if (!pillarRows?.length) {
+      console.error('Pillar lookup returned nothing');
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
+
+    const allowed = new Set(
+      allowedPillarSlugs(
+        validatedData.university,
+        accessConfig?.pillar_access,
+        accessConfig?.default_pillars,
+        pillarRows.map((p) => p.slug),
+      ),
+    );
+
+    // Resolve submitted names → rows, rejecting anything unknown or not offered
+    // to this university. Deduplicated so the same pillar can't be sent 3 times.
+    const requested = [...new Set(validatedData.pillars)];
+    const matched = requested.map((name) => pillarRows.find((p) => p.name === name));
+
+    if (matched.some((p) => !p || !allowed.has(p.slug))) {
+      return NextResponse.json(
+        { error: 'One or more selected pillars are not available for your university.' },
+        { status: 400 }
+      );
+    }
+
+    const selectedPillarRows = matched as { id: string; name: string; slug: string }[];
 
     // 4. Upload CV to private bucket with secure naming convention
     const fileExt = cvFile.name.split('.').pop();
@@ -154,27 +203,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to save application' }, { status: 500 });
     }
 
-    // 6. Save the Pillar Selections (Resolve Pillar Names to UUIDs first)
-    const { data: pillarsData, error: pillarsQueryError } = await supabaseAdmin
-      .from('pillars')
-      .select('id, name')
-      .in('name', validatedData.pillars);
+    // 6. Save the Pillar Selections (already resolved and authorised in step 3b)
+    const { error: pillarError } = await supabaseAdmin
+      .from('application_pillars')
+      .insert(
+        selectedPillarRows.map((p) => ({
+          application_id: appData.id, // Safe now because !appData is guarded above
+          pillar_id: p.id,
+        }))
+      );
 
-    if (pillarsQueryError || !pillarsData) {
-      console.error('Pillar Lookup Error:', pillarsQueryError);
-    } else {
-      const pillarInserts = pillarsData.map((p) => ({
-        application_id: appData.id, // Safe now because !appData is guarded above
-        pillar_id: p.id,
-      }));
-
-      const { error: pillarError } = await supabaseAdmin
-        .from('application_pillars')
-        .insert(pillarInserts);
-
-      if (pillarError) {
-        console.error('Pillar Junction Error:', pillarError);
-      }
+    // An application with no pillars is useless to reviewers, so roll the whole
+    // thing back rather than leaving a half-saved record behind.
+    if (pillarError) {
+      console.error('Pillar Junction Error:', pillarError);
+      await supabaseAdmin.from('applications').delete().eq('id', appData.id);
+      await supabaseAdmin.storage.from('cvs').remove([storageData.path]);
+      return NextResponse.json({ error: 'Failed to save application' }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, applicationId: appData.id }, { status: 201 });
