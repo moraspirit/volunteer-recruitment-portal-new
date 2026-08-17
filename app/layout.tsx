@@ -77,6 +77,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
                         <p className="text-xs text-zinc-400 text-center mt-6">
                             &copy; {new Date().getFullYear()} MoraSpirit. All rights reserved.
+                            <a href="./privacy" target="_blank" rel="noopener noreferrer" className="ml-2 underline hover:text-zinc-700 transition-colors">
+                                Privacy Policy
+                            </a>
                         </p>
                     </div>
                 </footer>
