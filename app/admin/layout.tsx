@@ -66,8 +66,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 {children}
             </main>
 
+            {/* Footer hidden from being added separately in admin panel because the main footer always appears in admin panel as well*/}
             {/* Footer */}
-            <footer className="bg-white border-t border-zinc-100 py-4 mt-auto">
+            {/* <footer className="bg-white border-t border-zinc-100 py-4 mt-auto">
                 <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                         <div className="w-4 h-4 relative opacity-50">
@@ -81,6 +82,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                         </div>
                         <span className="text-xs text-zinc-400">
                             &copy; {new Date().getFullYear()} MoraSpirit. All rights reserved.
+                            <a href="./privacy" target="_blank" rel="noopener noreferrer" className="ml-2 underline hover:text-zinc-700 transition-colors">
+                                Privacy Policy
+                            </a>
                         </span>
                     </div>
                     <a
@@ -92,7 +96,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                         moraspirit.com
                     </a>
                 </div>
-            </footer>
+            </footer> */}
         </div>
     );
 }
