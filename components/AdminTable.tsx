@@ -12,6 +12,7 @@ interface Filters {
     faculty: string;
     university: string;
     pillar: string;
+    tmle: string;
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -54,6 +55,7 @@ export default function AdminTable({ initialApplications }: { initialApplication
         faculty: 'ALL',
         university: 'ALL',
         pillar: 'ALL',
+        tmle: 'ALL',
     });
 
     // Derive unique filter option values from data
@@ -90,7 +92,22 @@ export default function AdminTable({ initialApplications }: { initialApplication
                 filters.pillar === 'ALL' ||
                 (app.application_pillars || []).some((p: any) => p.pillars?.name === filters.pillar);
 
-            return matchSearch && matchStatus && matchBatch && matchFaculty && matchUniversity && matchPillar;
+            const dept = (app.department || '').toLowerCase();
+            const index = (app.index_number || '').toLowerCase();
+            const appIsTMLE =
+                dept.includes('tmle') ||
+                dept.includes('tlm') ||
+                dept.includes('transport') ||
+                dept.includes('logistics') ||
+                index.includes('tmle') ||
+                index.includes('tlm');
+
+            const matchTMLE =
+                filters.tmle === 'ALL' ||
+                (filters.tmle === 'TMLE' && appIsTMLE) ||
+                (filters.tmle === 'WITHOUT_TMLE' && !appIsTMLE);
+
+            return matchSearch && matchStatus && matchBatch && matchFaculty && matchUniversity && matchPillar && matchTMLE;
         });
     }, [initialApplications, filters]);
 
@@ -207,7 +224,7 @@ export default function AdminTable({ initialApplications }: { initialApplication
     };
 
     const clearFilters = () => {
-        setFilters({ search: '', status: 'ALL', batch: 'ALL', faculty: 'ALL', university: 'ALL', pillar: 'ALL' });
+        setFilters({ search: '', status: 'ALL', batch: 'ALL', faculty: 'ALL', university: 'ALL', pillar: 'ALL', tmle: 'ALL' });
         setSelectedIds(new Set());
     };
 
@@ -394,6 +411,16 @@ export default function AdminTable({ initialApplications }: { initialApplication
                         options={[
                             { value: 'ALL', label: 'All Pillars' },
                             ...uniqueValues.pillars.map((p) => ({ value: p, label: p })),
+                        ]}
+                    />
+                    <FilterSelect
+                        value={filters.tmle}
+                        onChange={(v) => setFilter('tmle', v)}
+                        label="TMLE Filter"
+                        options={[
+                            { value: 'ALL', label: 'All Students' },
+                            { value: 'TMLE', label: 'TMLE Only' },
+                            { value: 'WITHOUT_TMLE', label: 'Without TMLE' },
                         ]}
                     />
                 </div>
